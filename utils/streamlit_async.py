@@ -15,7 +15,7 @@ T = TypeVar('T')
 # Apply nest_asyncio to allow nested event loops
 try:
     nest_asyncio.apply()
-except ImportError:t
+except ImportError:
     pass  # If nest_asyncio isn't available, continue without it
 
 

@@ -79,6 +79,18 @@ def run_coroutine(coro: Awaitable[T]) -> T:
             # This is a fatal error, we can't reuse the coroutine
             logging.error(f"Cannot reuse coroutine: {e}")
             raise ValueError("Cannot reuse the same coroutine object. Create a fresh coroutine for each call.")
+        elif "is bound to a different event loop" in str(e):
+            # Create a completely new event loop and run in it
+            logging.warning(f"Event loop binding error: {e}")
+            old_loop = asyncio.get_event_loop()
+            try:
+                old_loop.close()
+            except:
+                pass
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            # At this point we can't reuse the original coroutine, need to create a new one
+            raise ValueError("Event is bound to a different event loop. Create a fresh coroutine for each call.")
         else:
             # If all else fails, create a new event loop and try again
             logging.warning(f"Error in run_coroutine, retrying with new event loop: {e}")

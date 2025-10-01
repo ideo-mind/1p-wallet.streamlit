@@ -138,20 +138,52 @@ class App:
 
     def get_account_balance_sync(self, address):
         """Synchronous wrapper for get_account_balance"""
-        try:
-            # Use our clean nest_asyncio implementation
-            # Important: Create a fresh coroutine each time, never reuse
-            from utils.nest_runner import async_to_sync
-            # We call the function directly to get a fresh coroutine
-            return async_to_sync(self.get_account_balance(address))
-        except ValueError as e:
-            logging.error(f"Coroutine error: {str(e)}")
-            # Try one more time with a new coroutine
-            return async_to_sync(self.get_account_balance(address))
-        except Exception as e:
-            logging.error(f"Error in get_account_balance_sync: {str(e)}")
-            # Return 0 for balance rather than crashing completely
-            return 0.0
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                # Use our clean nest_asyncio implementation
+                # Important: Create a fresh coroutine each time, never reuse
+                from utils.nest_runner import async_to_sync
+
+                # We create a new client for each attempt to avoid event loop issues
+                if attempt > 0:
+                    # On retry, create a new client to avoid event loop binding issues
+                    from aptos_sdk.async_client import RestClient as AsyncRestClient
+                    temp_client = AsyncRestClient(self.client.base_url)
+
+                    async def get_balance_with_temp_client(addr):
+                        resources = await temp_client.account_resources(addr)
+                        apt_balance = 0
+                        for resource in resources:
+                            if resource['type'] == '0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>':
+                                apt_balance = int(resource['data']['coin']['value']) / 100000000  # Convert from octas to APT
+                                break
+                        return apt_balance
+
+                    # Use the temp client's coroutine
+                    return async_to_sync(get_balance_with_temp_client(address))
+                else:
+                    # First attempt: use the normal method
+                    return async_to_sync(self.get_account_balance(address))
+
+            except ValueError as e:
+                if "bound to a different event loop" in str(e) or "cannot reuse" in str(e):
+                    logging.warning(f"Event loop error (attempt {attempt+1}/{max_retries}): {str(e)}")
+                    if attempt == max_retries - 1:
+                        logging.error("Max retries exceeded for balance check")
+                        return 0.0
+                    # Let the loop continue to retry
+                    continue
+                else:
+                    logging.error(f"Unexpected ValueError in balance check: {str(e)}")
+                    return 0.0
+            except Exception as e:
+                logging.error(f"Error in get_account_balance_sync: {str(e)}")
+                # Return 0 for balance rather than crashing completely
+                return 0.0
+
+        # This should not be reached, but just in case
+        return 0.0
 
     def add_transaction(self, txn_hash, sender, recipient, amount, is_credit=None, status="completed", description=""):
         """Add a transaction to the transaction history"""

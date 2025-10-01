@@ -10,7 +10,9 @@ from utils.helpers import redirect_if_direct_access
 if redirect_if_direct_access():
     st.stop()
 
+# Import app and constants
 from pages import app
+from app import DOMAINS, COLORS, DIRECTIONS, DIRECTION_MAP, SYSTEM_WALLET_ADDRESS
 
 # Registration Page
 st.header("📝 Registration")
